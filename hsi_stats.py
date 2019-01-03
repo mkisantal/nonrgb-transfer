@@ -12,8 +12,8 @@ def check_image_stats(path):
     image_stats = []
     img = rasterio.open(path).read()
     for ch in range(img.shape[0]):
-        image_stats.append({'min': img[ch, :, :].min(),
-                            'max': img[ch, :, :].max()})
+        image_stats.append({'min': img[ch, :, :].min().item(),
+                            'max': img[ch, :, :].max().item()})
     return image_stats
 
 
@@ -59,7 +59,8 @@ def check_dataset_stats(root_dir, save=False):
 
 if __name__ == '__main__':
 
-    # check_dataset_stats(r"C:\datasets\EuroSATallBands\ds\images\remote_sensing\otherDatasets\sentinel_2\tif")
+    # check_dataset_stats(r"C:\datasets\EuroSATallBands\ds\images\remote_sensing\otherDatasets\sentinel_2\tif",
+    #                     save=True)
     check_dataset_stats('/home/mate/dataset/EuroSATallBands/ds/images/remote_sensing/otherDatasets/sentinel_2/tif',
                         save=True)
 
