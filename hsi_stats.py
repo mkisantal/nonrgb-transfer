@@ -13,7 +13,9 @@ def check_image_stats(path):
     img = rasterio.open(path).read()
     for ch in range(img.shape[0]):
         image_stats.append({'min': img[ch, :, :].min().item(),
-                            'max': img[ch, :, :].max().item()})
+                            'max': img[ch, :, :].max().item(),
+                            'mean': img[ch, :, :].mean().mean(),
+                            'var': img[ch, :, :].var().item()})
     return image_stats
 
 
@@ -35,20 +37,25 @@ def check_dataset_stats(root_dir, save=False):
     image = rasterio.open(image_paths[0]).read()
     num_channels = image.shape[0]
     for i in range(num_channels):
-        channelwise_stats.append({'min': 10e9, 'max': -1})
+        channelwise_stats.append({'min': 10e9, 'max': -1, 'mean': 0, 'var': 0})
 
     all_image_stats = []
     with Pool(8) as p:
         for stats in tqdm.tqdm(p.imap(check_image_stats, image_paths), total=len(image_paths)):
             all_image_stats.append(stats)
 
-    for stats in all_image_stats:
+    # summarizing statistics
+    for j, stats in enumerate(all_image_stats):
         for i in range(num_channels):
             channelwise_stats[i]['min'] = min(stats[i]['min'], channelwise_stats[i]['min'])
             channelwise_stats[i]['max'] = max(stats[i]['max'], channelwise_stats[i]['max'])
 
+            channelwise_stats[i]['mean'] += (stats[i]['mean'] - channelwise_stats[i]['mean']) / (j+1)
+            channelwise_stats[i]['var'] += (stats[i]['var'] - channelwise_stats[i]['var']) / (j+1)
+
     for channel in channelwise_stats:
-        print('min: {} \t max: {}'.format(channel['min'], channel['max']))
+        print('min: {} \t max: {} \t mean: {:.02f} \t var: {:.02f}'.format(channel['min'], channel['max'],
+                                                                           channel['mean'], channel['var']))
 
     if save:
         with open(os.path.join('spectrum_stats.json'), 'w') as fout:
