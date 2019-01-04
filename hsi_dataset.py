@@ -4,6 +4,11 @@ from functools import partial
 from torchvision import transforms
 import torch
 from scipy.ndimage.interpolation import zoom
+import numpy as np
+import os
+from random import shuffle
+from shutil import copyfile
+
 
 def hsi_loader(channels, path):
 
@@ -18,11 +23,68 @@ def hsi_loader(channels, path):
     image = zoom(image, zoom=[1, 3.5, 3.5], order=1, prefilter=False)
     image = torch.tensor(image)
     # float in [0, 1]
+    # WIP
 
 
+def split_dataset(root_dir, split=[.8, .2]):
 
+    """ Splitting dataset to train (val) and test sets. """
+
+    dataset_name = os.path.basename(os.path.normpath(root_dir))
+
+    split = np.array(split, dtype=np.float)
+    split /= split.sum()
+
+    if split.shape[0] == 2:
+        split_names = ['train', 'test']
+    elif split.shape[0] == 3:
+        split_names = ['train', 'val', 'test']
     else:
-        return image
+        raise ValueError('Split should be length 2 (train, test) or 3 (train, val, test)')
+
+    # create root folders for dataset partitions
+    split_roots = []
+    for name in split_names:
+        split_root = os.path.join(root_dir, '..', '{}_{}'.format(dataset_name,name))
+        os.makedirs(split_root)
+        split_roots.append(split_root)
+
+    # loop over classes
+    category_folders = os.listdir(root_dir)
+    for category in category_folders:
+        category_path = os.path.join(root_dir, category)
+        print('{}: {}'.format('category', category))
+
+        # create category folders in partitions
+        split_category_paths = []
+        for split_root in split_roots:
+            split_category_path = os.path.join(split_root, category)
+            os.makedirs(split_category_path)
+            split_category_paths.append(split_category_path)
+
+        # list source images
+        image_names = os.listdir(category_path)
+        source_image_paths = []
+        for image_name in image_names:
+            source_image_paths.append(os.path.join(category_path, image_name))
+
+        # divide images to partitions
+        destination_image_paths = []
+        shuffle(image_names)
+        num_images_in_split = [int(x*len(image_names)) for x in split]
+        print('{}: {}'.format('Number of images in splits:', num_images_in_split))
+        split_limits = np.append([0], np.cumsum(num_images_in_split))
+        split_limits[-1] = len(image_names)
+        for i in range(split_limits.shape[0]-1):
+            for j in range(split_limits[i], split_limits[i+1]):
+                destination_image_paths.append(os.path.join(split_category_paths[i], image_names[j]))
+
+        # copy the images to their destination
+        for src, dst in zip(source_image_paths, destination_image_paths):
+            copyfile(src, dst)
+        print('\n\n')
+
+    return
 
 
 class HsiImageFolder(DatasetFolder):
@@ -41,14 +103,11 @@ class HsiImageFolder(DatasetFolder):
 
 if __name__ == '__main__':
 
-    loader = HsiImageFolder(root=r"C:\datasets\EuroSATallBands\ds\images\remote_sensing\otherDatasets\sentinel_2\tif",
-                            channels=[1, 2, 3])
+    # split_dataset(r"C:\datasets\EuroSATallBands", split=[.8, .2])
+    split_dataset("/home/mate/dataset/EuroSATallBands", split=[.8, .2])
     print('done.')
 
 
 
-transforms.ToTensor
-
-torch.from_numpy()
 
 
