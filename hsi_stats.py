@@ -66,8 +66,5 @@ def check_dataset_stats(root_dir, save=False):
 
 if __name__ == '__main__':
 
-    # check_dataset_stats(r"C:\datasets\EuroSATallBands\ds\images\remote_sensing\otherDatasets\sentinel_2\tif",
-    #                     save=True)
-    check_dataset_stats('/home/mate/dataset/EuroSATallBands/ds/images/remote_sensing/otherDatasets/sentinel_2/tif',
-                        save=True)
+    check_dataset_stats('/home/mate/dataset/EuroSATallBands_train', save=True)
 

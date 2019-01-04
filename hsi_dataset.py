@@ -8,22 +8,40 @@ import numpy as np
 import os
 from random import shuffle
 from shutil import copyfile
+import json
 
 
-def hsi_loader(channels, path):
+# getting statistics ready
+try:
+    with open('spectrum_stats.json', 'r') as f:
+        spectrum_stats = json.load(f)
+except FileNotFoundError:
+    msg = 'Channelwise statistics for multispectral image normalization not available.'
+    msg += '\nCalculate statistics by running hsi_stats.py!'
+    raise ImportError(msg)
 
-    """ Loader for hyperspectral tif images, returns selected channels. """
+spectrum_means = np.expand_dims(np.expand_dims(np.array([x['mean'] for x in spectrum_stats]), 1), 1).astype('float32')
+spectrum_vars = np.expand_dims(np.expand_dims(np.array([x['var'] for x in spectrum_stats]), 1), 1).astype('float32')
+
+
+def hsi_loader(chs, path):
+
+    """ Loader for hyperspectral tif images, preprocesses and returns selected channels. """
 
     dataset_reader = rasterio.open(path)
-    image = dataset_reader.read()
-    if channels is not None:
-        image = image[channels, :, :]
+    image = dataset_reader.read().astype('float32')
+    if chs is not None:
+        image = image[chs, :, :]
+    else:
+        chs = np.arange(0, 13)
     # for now image transforms are done here, as PIL does not work with >3 channels
     # resize to from 64 to 224; don't use order >1 to avoid mixing channels
     image = zoom(image, zoom=[1, 3.5, 3.5], order=1, prefilter=False)
-    image = torch.tensor(image)
-    # float in [0, 1]
-    # WIP
+    # normalize to zero mean and unit variance
+    image -= spectrum_means[chs, :, :]
+    image /= spectrum_vars[chs, :, :]
+
+    return torch.tensor(image)
 
 
 def split_dataset(root_dir, split=[.8, .2]):
@@ -103,10 +121,11 @@ class HsiImageFolder(DatasetFolder):
 
 if __name__ == '__main__':
 
+    # tests
     # split_dataset(r"C:\datasets\EuroSATallBands", split=[.8, .2])
-    split_dataset("/home/mate/dataset/EuroSATallBands", split=[.8, .2])
+    # split_dataset("/home/mate/dataset/EuroSATallBands", split=[.8, .2])
+    # a = hsi_loader([1], r'C:\datasets\EuroSATallBands_train\Residential\Residential_1006.tif')
     print('done.')
-
 
 
 
