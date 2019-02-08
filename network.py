@@ -1,5 +1,7 @@
 from torchvision import models
 import torch.nn as nn
+from PIL import Image
+import numpy as np
 
 
 class GeneratorResidualModule(nn.Module):
@@ -124,6 +126,20 @@ class MultiChannelNet(nn.Module):
             for param in self.input_transform_module.parameters():
                 param.requires_grad = True
         return
+
+    def get_transformed_input(self, x, pil=False):
+
+        """ For inspecting the image we are feeding to the pre-trained network. """
+
+        if self.input_transform_module is not None:
+            x = self.input_transform_module(x)
+        if not pil:
+            return x
+        else:
+            x += x.min()
+            x *= 255.0 / x.max()
+            img = np.uint8(x.cpu().numpy()).transpose()
+            return Image.fromarray(img)
 
 
 if __name__ == '__main__':

@@ -6,7 +6,7 @@ import torch
 from scipy.ndimage.interpolation import zoom
 import numpy as np
 import os
-from random import shuffle
+from random import shuffle, randint
 from shutil import copyfile
 import json
 
@@ -117,6 +117,21 @@ class HsiImageFolder(DatasetFolder):
                                              target_transform=target_transform)
         self.imgs = self.samples
         return
+
+
+def load_single_image(idx=None, category=None, root=None, channels=None):
+    if root is None:
+        root = '/home/mate/dataset/EuroSATallBands'
+
+    if category is None:
+        category = randint(0, 9)
+    category_list = os.listdir(root)
+    category_list.sort()
+    image_list = os.listdir(os.path.join(root, category_list[category]))
+    if idx is None:
+        idx = randint(0, len(image_list))
+    path = os.path.join(root, category_list[category], image_list[idx])
+    return hsi_loader(channels, path)
 
 
 if __name__ == '__main__':
