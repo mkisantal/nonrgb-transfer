@@ -24,7 +24,7 @@ spectrum_means = np.expand_dims(np.expand_dims(np.array([x['mean'] for x in spec
 spectrum_vars = np.expand_dims(np.expand_dims(np.array([x['var'] for x in spectrum_stats]), 1), 1).astype('float32')
 
 
-def hsi_loader(chs, path):
+def hsi_loader(chs, path, normalize=True):
 
     """ Loader for hyperspectral tif images, preprocesses and returns selected channels. """
 
@@ -38,8 +38,9 @@ def hsi_loader(chs, path):
     # resize to from 64 to 224; don't use order >1 to avoid mixing channels
     image = zoom(image, zoom=[1, 3.5, 3.5], order=1, prefilter=False)
     # normalize to zero mean and unit variance
-    image -= spectrum_means[chs, :, :]
-    image /= spectrum_vars[chs, :, :]
+    if normalize:
+        image -= spectrum_means[chs, :, :]
+        image /= spectrum_vars[chs, :, :]
 
     return torch.tensor(image)
 
@@ -119,7 +120,7 @@ class HsiImageFolder(DatasetFolder):
         return
 
 
-def load_single_image(idx=None, category=None, root=None, channels=None):
+def load_single_image(idx=None, category=None, root=None, channels=None, normalize=True):
     if root is None:
         root = '/home/mate/dataset/EuroSATallBands'
 
@@ -131,7 +132,7 @@ def load_single_image(idx=None, category=None, root=None, channels=None):
     if idx is None:
         idx = randint(0, len(image_list))
     path = os.path.join(root, category_list[category], image_list[idx])
-    return hsi_loader(channels, path)
+    return hsi_loader(channels, path, normalize=normalize)
 
 
 if __name__ == '__main__':
