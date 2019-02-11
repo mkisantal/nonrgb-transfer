@@ -9,6 +9,9 @@ import os
 from random import shuffle, randint
 from shutil import copyfile
 import json
+from multiprocessing import Pool
+import tqdm
+
 
 
 # getting statistics ready
@@ -36,7 +39,7 @@ def hsi_loader(chs, path, normalize=True):
         chs = np.arange(0, 13)
     # for now image transforms are done here, as PIL does not work with >3 channels
     # resize to from 64 to 224; don't use order >1 to avoid mixing channels
-    image = zoom(image, zoom=[1, 3.5, 3.5], order=1, prefilter=False)
+    image = zoom(image, zoom=[1, 3.5, 3.5], order=1, prefilter=False)  # 20 times slower than RGB processing!!
     # normalize to zero mean and unit variance
     if normalize:
         image -= spectrum_means[chs, :, :]
@@ -58,7 +61,7 @@ def npy_hsi_loader(chs, path, normalize=True):
         chs = np.arange(0, 13)
     # for now image transforms are done here, as PIL does not work with >3 channels
     # resize to from 64 to 224; don't use order >1 to avoid mixing channels
-    image = zoom(image, zoom=[1, 3.5, 3.5], order=1, prefilter=False)
+    # image = zoom(image, zoom=[1, 3.5, 3.5], order=1, prefilter=False) # Done at conversion instead.
     # normalize to zero mean and unit variance
     if normalize:
         image -= spectrum_means[chs, :, :]
@@ -120,18 +123,29 @@ def split_dataset(root_dir, split=[.8, .2], convert=False, dataset_suffix=''):
             for j in range(split_limits[i], split_limits[i+1]):
                 destination_image_paths.append(os.path.join(split_category_paths[i], image_names[j]))
 
-        # copy the images to their destination
-        for src, dst in zip(source_image_paths[:10], destination_image_paths[:10]):
-            if convert:
-                dataset_reader = rasterio.open(src)
-                image = dataset_reader.read().astype('float32')
-                np.save(dst[:-4], image)
-                # TODO: doing extra conversions here?
-            else:
+        if convert:
+            src_dst_dicts = [{'src': src, 'dst': dst[:-4]} for src, dst in zip(source_image_paths, destination_image_paths)]
+            with Pool(8) as p:
+                for _ in tqdm.tqdm(p.imap(process_and_copy_image, src_dst_dicts), total=len(src_dst_dicts)):
+                    pass
+        else:
+            for src, dst in zip(source_image_paths, destination_image_paths):
                 copyfile(src, dst)
         print('\n\n')
 
     return
+
+
+def process_and_copy_image(src_dst_dict):
+
+    """ Loading HSI tif, converting to npy, more other slow processing steps. """
+
+    dataset_reader = rasterio.open(src_dst_dict['src'])
+    image = dataset_reader.read().astype('float32')
+    image = zoom(image, zoom=[1, 3.5, 3.5], order=1, prefilter=False)  # scipy zoom is slow, better do it here
+    # TODO: optionally more pre-processing steps
+    np.save(src_dst_dict['dst'], image)
+    return True
 
 
 class HsiImageFolder(DatasetFolder):
@@ -142,7 +156,7 @@ class HsiImageFolder(DatasetFolder):
         super(HsiImageFolder, self).__init__(root=root,
                                              loader=partial(npy_hsi_loader, channels) if npy
                                                else partial(hsi_loader, channels),
-                                             extensions=['tif'],
+                                             extensions=['npy'] if npy else ['tif'],
                                              transform=transform,
                                              target_transform=target_transform)
         self.imgs = self.samples
