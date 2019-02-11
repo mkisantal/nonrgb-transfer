@@ -45,9 +45,31 @@ def hsi_loader(chs, path, normalize=True):
     return torch.tensor(image)
 
 
-def split_dataset(root_dir, split=[.8, .2]):
+def npy_hsi_loader(chs, path, normalize=True):
 
-    """ Splitting dataset to train (val) and test sets. """
+    """ Loader for converted npy hyperspectral images, preprocesses and returns selected channels. """
+
+    # TODO: merge this fcn with hsi_loader if possible
+
+    image = np.load(path)
+    if chs is not None:
+        image = image[chs, :, :]
+    else:
+        chs = np.arange(0, 13)
+    # for now image transforms are done here, as PIL does not work with >3 channels
+    # resize to from 64 to 224; don't use order >1 to avoid mixing channels
+    image = zoom(image, zoom=[1, 3.5, 3.5], order=1, prefilter=False)
+    # normalize to zero mean and unit variance
+    if normalize:
+        image -= spectrum_means[chs, :, :]
+        image /= spectrum_vars[chs, :, :]
+
+    return torch.tensor(image)
+
+
+def split_dataset(root_dir, split=[.8, .2], convert=False, dataset_suffix=''):
+
+    """ Splitting dataset to train (val) and test sets. Optionally converting to .npy for faster loading. """
 
     dataset_name = os.path.basename(os.path.normpath(root_dir))
 
@@ -64,7 +86,7 @@ def split_dataset(root_dir, split=[.8, .2]):
     # create root folders for dataset partitions
     split_roots = []
     for name in split_names:
-        split_root = os.path.join(root_dir, '..', '{}_{}'.format(dataset_name,name))
+        split_root = os.path.join(root_dir, '..', '{}_{}{}'.format(dataset_name, dataset_suffix, name))
         os.makedirs(split_root)
         split_roots.append(split_root)
 
@@ -99,8 +121,14 @@ def split_dataset(root_dir, split=[.8, .2]):
                 destination_image_paths.append(os.path.join(split_category_paths[i], image_names[j]))
 
         # copy the images to their destination
-        for src, dst in zip(source_image_paths, destination_image_paths):
-            copyfile(src, dst)
+        for src, dst in zip(source_image_paths[:10], destination_image_paths[:10]):
+            if convert:
+                dataset_reader = rasterio.open(src)
+                image = dataset_reader.read().astype('float32')
+                np.save(dst[:-4], image)
+                # TODO: doing extra conversions here?
+            else:
+                copyfile(src, dst)
         print('\n\n')
 
     return
@@ -110,9 +138,10 @@ class HsiImageFolder(DatasetFolder):
 
     """ ImageFolder dataset for hyperspectral images. """
 
-    def __init__(self, root, transform=None, target_transform=None, channels=None):
+    def __init__(self, root, transform=None, target_transform=None, channels=None, npy=False):
         super(HsiImageFolder, self).__init__(root=root,
-                                             loader=partial(hsi_loader, channels),
+                                             loader=partial(npy_hsi_loader, channels) if npy
+                                               else partial(hsi_loader, channels),
                                              extensions=['tif'],
                                              transform=transform,
                                              target_transform=target_transform)
@@ -138,8 +167,8 @@ def load_single_image(idx=None, category=None, root=None, channels=None, normali
 if __name__ == '__main__':
 
     # tests
-    # split_dataset(r"C:\datasets\EuroSATallBands", split=[.8, .2])
-    # split_dataset("/home/mate/dataset/EuroSATallBands", split=[.8, .2])
+    # split_dataset(r"C:\datasets\EuroSATallBands", split=[.8, .2], convert=True, dataset_suffix='npy_')
+    # split_dataset("/home/mate/dataset/EuroSATallBands", split=[.8, .2], convert=True, dataset_suffix='npy_')
     # a = hsi_loader([1], r'C:\datasets\EuroSATallBands_train\Residential\Residential_1006.tif')
     print('done.')
 
