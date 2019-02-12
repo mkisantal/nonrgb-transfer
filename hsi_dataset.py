@@ -13,7 +13,6 @@ from multiprocessing import Pool
 import tqdm
 
 
-
 # getting statistics ready
 try:
     with open('spectrum_stats.json', 'r') as f:
@@ -109,12 +108,12 @@ def split_dataset(root_dir, split=[.8, .2], convert=False, dataset_suffix=''):
         # list source images
         image_names = os.listdir(category_path)
         source_image_paths = []
+        shuffle(image_names)
         for image_name in image_names:
             source_image_paths.append(os.path.join(category_path, image_name))
 
         # divide images to partitions
         destination_image_paths = []
-        shuffle(image_names)
         num_images_in_split = [int(x*len(image_names)) for x in split]
         print('{}: {}'.format('Number of images in splits:', num_images_in_split))
         split_limits = np.append([0], np.cumsum(num_images_in_split))
