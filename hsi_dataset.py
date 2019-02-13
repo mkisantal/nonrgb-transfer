@@ -1,7 +1,6 @@
 from torchvision.datasets import DatasetFolder
 import rasterio
 from functools import partial
-from torchvision import transforms
 import torch
 from scipy.ndimage.interpolation import zoom
 import numpy as np
@@ -23,7 +22,7 @@ except FileNotFoundError:
     raise ImportError(msg)
 
 spectrum_means = np.expand_dims(np.expand_dims(np.array([x['mean'] for x in spectrum_stats]), 1), 1).astype('float32')
-spectrum_vars = np.expand_dims(np.expand_dims(np.array([x['var'] for x in spectrum_stats]), 1), 1).astype('float32')
+spectrum_stds = np.expand_dims(np.expand_dims(np.array([x['std'] for x in spectrum_stats]), 1), 1).astype('float32')
 
 
 def hsi_loader(chs, path, normalize=True):
@@ -42,7 +41,7 @@ def hsi_loader(chs, path, normalize=True):
     # normalize to zero mean and unit variance
     if normalize:
         image -= spectrum_means[chs, :, :]
-        image /= spectrum_vars[chs, :, :]
+        image /= spectrum_stds[chs, :, :]
 
     return torch.tensor(image)
 
@@ -64,7 +63,7 @@ def npy_hsi_loader(chs, path, normalize=True):
     # normalize to zero mean and unit variance
     if normalize:
         image -= spectrum_means[chs, :, :]
-        image /= spectrum_vars[chs, :, :]
+        image /= spectrum_stds[chs, :, :]
 
     return torch.tensor(image)
 
@@ -123,7 +122,8 @@ def split_dataset(root_dir, split=[.8, .2], convert=False, dataset_suffix=''):
                 destination_image_paths.append(os.path.join(split_category_paths[i], image_names[j]))
 
         if convert:
-            src_dst_dicts = [{'src': src, 'dst': dst[:-4]} for src, dst in zip(source_image_paths, destination_image_paths)]
+            src_dst_dicts = [{'src': src, 'dst': dst[:-4]} for src, dst in zip(source_image_paths,
+                                                                               destination_image_paths)]
             with Pool(8) as p:
                 for _ in tqdm.tqdm(p.imap(process_and_copy_image, src_dst_dicts), total=len(src_dst_dicts)):
                     pass

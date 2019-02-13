@@ -3,20 +3,19 @@ import os
 from multiprocessing import Pool
 import tqdm
 import json
+import numpy as np
 
 
-def check_image_stats(path):
+def load_channels(path):
 
-    """ Check channelwise statistics for multispectral image. """
+    """ Load all channels for multispectral image. """
 
-    image_stats = []
+    channels = []
     img = rasterio.open(path).read()
     for ch in range(img.shape[0]):
-        image_stats.append({'min': img[ch, :, :].min().item(),
-                            'max': img[ch, :, :].max().item(),
-                            'mean': img[ch, :, :].mean().mean(),
-                            'var': img[ch, :, :].var().item()})
-    return image_stats
+        reshaped_channel = np.reshape(img[ch, :, :], [1, -1])
+        channels.append(reshaped_channel)
+    return channels
 
 
 def check_dataset_stats(root_dir, save=False):
@@ -37,25 +36,36 @@ def check_dataset_stats(root_dir, save=False):
     image = rasterio.open(image_paths[0]).read()
     num_channels = image.shape[0]
     for i in range(num_channels):
-        channelwise_stats.append({'min': 10e9, 'max': -1, 'mean': 0, 'var': 0})
+        channelwise_stats.append({'min': 10e9, 'max': -1, 'mean': 0, 'var': 0, 'std': 0})
 
-    all_image_stats = []
+    all_image_channels = []
     with Pool(8) as p:
-        for stats in tqdm.tqdm(p.imap(check_image_stats, image_paths), total=len(image_paths)):
-            all_image_stats.append(stats)
+        for channels in tqdm.tqdm(p.imap(load_channels, image_paths), total=len(image_paths)):
+            all_image_channels.append(channels)
 
-    # summarizing statistics
-    for j, stats in enumerate(all_image_stats):
+    # for image_path in image_paths:
+    #     all_image_channels.append(load_channels(image_path))
+
+    separated_channels = [[] for _ in range(num_channels)]
+    for image_channels in all_image_channels:
         for i in range(num_channels):
-            channelwise_stats[i]['min'] = min(stats[i]['min'], channelwise_stats[i]['min'])
-            channelwise_stats[i]['max'] = max(stats[i]['max'], channelwise_stats[i]['max'])
+            separated_channels[i].append(image_channels[i])
 
-            channelwise_stats[i]['mean'] += (stats[i]['mean'] - channelwise_stats[i]['mean']) / (j+1)
-            channelwise_stats[i]['var'] += (stats[i]['var'] - channelwise_stats[i]['var']) / (j+1)
+    joined_channels = []
+    for images in separated_channels:
+        joined_channels.append(np.hstack(images))
+
+    for i, ch in enumerate(joined_channels):
+        channelwise_stats[i]['min'] = ch.min().item()
+        channelwise_stats[i]['max'] = ch.max().item()
+        channelwise_stats[i]['mean'] = ch.mean().item()
+        channelwise_stats[i]['var'] = ch.var().item()
+        channelwise_stats[i]['std'] = ch.std().item()
+        # summarizing statistics
 
     for channel in channelwise_stats:
-        print('min: {} \t max: {} \t mean: {:.02f} \t var: {:.02f}'.format(channel['min'], channel['max'],
-                                                                           channel['mean'], channel['var']))
+        print('min: {} \t max: {} \t mean: {:.02f} \t std: {:.02f}'.format(channel['min'], channel['max'],
+                                                                           channel['mean'], channel['std']))
 
     if save:
         with open(os.path.join('spectrum_stats.json'), 'w') as fout:
@@ -67,4 +77,4 @@ def check_dataset_stats(root_dir, save=False):
 if __name__ == '__main__':
 
     check_dataset_stats('/home/mate/dataset/EuroSATallBands_train', save=True)
-
+    # check_dataset_stats('/datasets/EuroSATallBands_test', save=True)
