@@ -162,6 +162,17 @@ class MultiChannelNet(nn.Module):
         x = self.rgb_net(x)
         return x
 
+    def discriminate(self, x):
+
+        """ Running the domain discriminator. """
+
+        if self.domain_discriminator is None:
+            return
+
+        x = self.domain_discriminator(x)
+        return x
+
+
     def set_finetuning(self):
 
         """ Setting all model parameters trainable. """
