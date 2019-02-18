@@ -2,8 +2,11 @@ from torchvision import models
 import torch.nn as nn
 from PIL import Image
 import numpy as np
-import torch # for debug only
+import torch  # for debug only
 import itertools
+
+fixed_random_noise_vector = [0.33963535, -0.70369039,  0.62590457,  0.59152784,  0.4051563,
+                             0.26512166,  0.25203669, -0.39983498,  0.66386131, -0.94438161]
 
 
 class GeneratorResidualModule(nn.Module):
@@ -43,9 +46,12 @@ class PixelDAGenerator(nn.Module):
 
     # TODO: consider adding random input vector
 
-    def __init__(self, num_channels):
+    def __init__(self, num_channels, latent_dim=10, im_size=224):
         super(PixelDAGenerator, self).__init__()
-        self.conv1 = nn.Conv2d(num_channels, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        self.fixed_noise = torch.tensor(fixed_random_noise_vector)
+        self.noise_in = nn.Linear(latent_dim, im_size**2, bias=False)
+        self.noise_bn = nn.BatchNorm1d(im_size**2)
+        self.conv1 = nn.Conv2d(num_channels+1, 64, kernel_size=3, stride=1, padding=1, bias=False)
         # self.bn1 = nn.BatchNorm2d(64) # not included according to TF implementation
         self.relu = nn.ReLU(inplace=True)
         self.res_block1 = GeneratorResidualModule(64, 64)
@@ -54,7 +60,12 @@ class PixelDAGenerator(nn.Module):
         self.final_conv = nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1, bias=False)
         self.tanh = nn.Tanh()
 
-    def forward(self, x):
+    def forward(self, x, z=None):
+        if z is None:
+            z = self.fixed_noise.repeat(x.shape[0], 1)
+        z = self.noise_in(z)
+        z = self.noise_bn(z)
+        x = torch.cat([x, z.view([x.shape[0], 1, x.shape[2], x.shape[3]])], 1)
         x = self.conv1(x)
         x = self.relu(x)
 
@@ -141,12 +152,12 @@ class MultiChannelNet(nn.Module):
         fc_in_features = self.rgb_net.fc.in_features
         self.rgb_net.fc = nn.Linear(fc_in_features, num_classes)
 
-    def forward(self, x):
+    def forward(self, x, z=None):
 
         """ Running inference on HSI with generator + classifier. """
 
         if self.input_transform_module is not None:
-            three_channel_image = self.input_transform_module(x)
+            three_channel_image = self.input_transform_module(x, z)
         else:
             three_channel_image = x
         output = self.rgb_net(three_channel_image)
