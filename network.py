@@ -111,7 +111,7 @@ class PixelDADiscriminator(nn.Module):
         x = self.block5(x)
         x = self.block6(x)
         x = self.block7(x)
-        x = self.fc(x.view(input.size(0), -1))
+        x = self.fc(x.view(x.size(0), -1))
         out = self.sigmoid(x)
         return out
 
@@ -123,12 +123,10 @@ class MultiChannelNet(nn.Module):
     def __init__(self,
                  num_channels=3,
                  num_classes=10,
-                 input_mode=None,
-                 domain_adaptation=False):
+                 input_mode=None):
         super(MultiChannelNet, self).__init__()
 
         self.input_transform_module = None
-        self.domain_discriminator = None
         self.rgb_net = models.resnet50(pretrained=True)
 
         if input_mode == 'replace_conv1':
@@ -139,9 +137,6 @@ class MultiChannelNet(nn.Module):
             self.input_transform_module = PixelDAGenerator(num_channels)
         self.conv1_replaced = input_mode == 'replace_conv1'
 
-        if domain_adaptation:
-            self.domain_discriminator = PixelDADiscriminator()
-
         # replace output layer
         fc_in_features = self.rgb_net.fc.in_features
         self.rgb_net.fc = nn.Linear(fc_in_features, num_classes)
@@ -151,9 +146,11 @@ class MultiChannelNet(nn.Module):
         """ Running inference on HSI with generator + classifier. """
 
         if self.input_transform_module is not None:
-            x = self.input_transform_module(x)
-        x = self.rgb_net(x)
-        return x
+            three_channel_image = self.input_transform_module(x)
+        else:
+            three_channel_image = x
+        output = self.rgb_net(three_channel_image)
+        return output, three_channel_image
 
     def classify(self, x):
 
@@ -162,22 +159,11 @@ class MultiChannelNet(nn.Module):
         x = self.rgb_net(x)
         return x
 
-    def discriminate(self, x):
-
-        """ Running the domain discriminator. """
-
-        if self.domain_discriminator is None:
-            return
-
-        x = self.domain_discriminator(x)
-        return x
-
-
     def set_finetuning(self):
 
         """ Setting all model parameters trainable. """
 
-        for subnetwork in [self.rgb_net, self.input_transform_module, self.domain_discriminator]:
+        for subnetwork in [self.rgb_net, self.input_transform_module]:
             if subnetwork is not None:
                 for param in subnetwork.parameters():
                     param.requires_grad = True
@@ -194,7 +180,7 @@ class MultiChannelNet(nn.Module):
         if self.conv1_replaced:
             for param in self.rgb_net.conv1.parameters():
                 param.requires_grad = True
-        for subnetwork in [self.input_transform_module, self.domain_discriminator]:
+        for subnetwork in [self.input_transform_module]:
             if subnetwork is not None:
                 for param in subnetwork.parameters():
                     param.requires_grad = True
@@ -227,8 +213,7 @@ class MultiChannelNet(nn.Module):
 if __name__ == '__main__':
     net = MultiChannelNet(num_channels=13,
                           num_classes=10,
-                          input_mode='domain_adapter',
-                          domain_adaptation=True)
+                          input_mode='domain_adapter')
     hsi = torch.ones([1, 13, 224, 224])
     rgb = torch.ones([1, 3, 224, 224])
     from code import interact
