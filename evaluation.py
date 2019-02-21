@@ -21,7 +21,7 @@ def to_color_image(torch_tensor, pil=True):
         return norm_image
 
 
-def inspect_images(model, device, num_samples=5, channels=None):
+def inspect_images(model, device, num_samples=5, channels=None, gen_only=False):
 
     """ Visualizing learned HSI Image embedding. """
 
@@ -36,7 +36,10 @@ def inspect_images(model, device, num_samples=5, channels=None):
             rgb_images.append(to_color_image(original_rgb, pil=False))
             x = x.unsqueeze(0).to(device)
             with torch.set_grad_enabled(False):
-                transformed_image = model.module.get_transformed_input(x)
+                if gen_only:
+                    transformed_image=model(x)
+                else:
+                    transformed_image = model.module.get_transformed_input(x)
             converted_images.append(to_color_image(transformed_image, pil=False))
         appended_rgb = np.hstack(rgb_images)
         appended_conv = np.hstack(converted_images)
