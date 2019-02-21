@@ -63,7 +63,7 @@ class PixelDAGenerator(nn.Module):
     def forward(self, x, z=None):
         if z is None:
             z = self.fixed_noise.repeat(x.shape[0], 1)
-        z = self.noise_in(z)
+        z = self.noise_in(z.cuda())
         z = self.noise_bn(z)
         x = torch.cat([x, z.view([x.shape[0], 1, x.shape[2], x.shape[3]])], 1)
         x = self.conv1(x)
@@ -81,13 +81,15 @@ class PixelDAGenerator(nn.Module):
 
 class DiscriminatorModule(nn.Module):
 
-    """ Conv-BN-LeakyRelu module for PixelDADiscriminator. """
+    """ Conv-BN-LeakyRelu module for PixelDADiscriminator, and for PatchGAN. """
 
-    def __init__(self, inplanes):
+    def __init__(self, inplanes, kernel_size=3, stride=None, padding=1):
         super(DiscriminatorModule, self).__init__()
         planes = 64 if inplanes == 3 else 2*inplanes
-        stride = 1 if inplanes == 3 else 2
-        self.conv = nn.Conv2d(inplanes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
+        if stride is None:
+            stride = 1 if inplanes == 3 else 2
+        self.conv = nn.Conv2d(inplanes, planes, kernel_size=kernel_size,
+                              stride=stride, padding=padding, bias=False)
         self.bn = nn.BatchNorm2d(planes)
         self.lrelu = nn.LeakyReLU(.2, inplace=True)
 
@@ -125,6 +127,54 @@ class PixelDADiscriminator(nn.Module):
         x = self.fc(x.view(x.size(0), -1))
         out = self.sigmoid(x)
         return out
+
+
+class PatchGanDiscriminator(nn.Module):
+    def __init__(self):
+        super(PatchGanDiscriminator, self).__init__()
+        # self.block1 = DiscriminatorModule(3, kernel_size=4, stride=2)
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=4, stride=2, padding=1, bias=True)
+        self.lrelu1 = nn.LeakyReLU(negative_slope=.2, inplace=True)
+        self.block2 = DiscriminatorModule(64, kernel_size=4, stride=2)
+        self.block3 = DiscriminatorModule(128, kernel_size=4, stride=2)
+        self.block4 = DiscriminatorModule(256, kernel_size=4, stride=1)
+        self.last_conv = nn.Conv2d(512, 1, kernel_size=4, stride=1, padding=1, bias=True)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.lrelu1(x)
+        x = self.block2(x)
+        x = self.block3(x)
+        x = self.block4(x)
+        x = self.last_conv(x)
+        return x
+
+
+class PixelGanDiscriminator(nn.Module):
+    def __init__(self):
+        super(PixelGanDiscriminator, self).__init__()
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=1, stride=1, padding=0, bias=True)
+        self.lrelu1 = nn.LeakyReLU(negative_slope=.2, inplace=True)
+        self.block2 = DiscriminatorModule(64, kernel_size=1, stride=1, padding=0)
+        self.last_conv = nn.Conv2d(128, 1, kernel_size=1, stride=1, padding=0, bias=True)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.lrelu1(x)
+        x = self.block2(x)
+        x = self.last_conv(x)
+        return x
+"""
+
+Conv2d(3, 64, kernel_size=(1, 1), stride=(1, 1))
+LeakyReLU(negative_slope=0.2, inplace)
+Conv2d(64, 128, kernel_size=(1, 1), stride=(1, 1), bias=False)
+BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+LeakyReLU(negative_slope=0.2, inplace)
+Conv2d(128, 1, kernel_size=(4, 4), stride=(1, 1))
+
+
+"""
 
 
 class MultiChannelNet(nn.Module):
