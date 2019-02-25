@@ -68,7 +68,7 @@ def npy_hsi_loader(chs, path, normalize=True):
     return torch.tensor(image)
 
 
-def split_dataset(root_dir, split=[.8, .2], convert=False, dataset_suffix=''):
+def split_dataset(root_dir, split=[.8, .2], convert=False, dataset_suffix='', per_category_image_limit=None):
 
     """ Splitting dataset to train (val) and test sets. Optionally converting to .npy for faster loading. """
 
@@ -118,7 +118,12 @@ def split_dataset(root_dir, split=[.8, .2], convert=False, dataset_suffix=''):
         split_limits = np.append([0], np.cumsum(num_images_in_split))
         split_limits[-1] = len(image_names)
         for i in range(split_limits.shape[0]-1):
-            for j in range(split_limits[i], split_limits[i+1]):
+            if i == 0 and per_category_image_limit is not None:  # optionally use less image for training
+                to = per_category_image_limit
+            else:
+                to = split_limits[i+1]
+
+            for j in range(split_limits[i], to):
                 destination_image_paths.append(os.path.join(split_category_paths[i], image_names[j]))
 
         if convert:
@@ -181,7 +186,8 @@ if __name__ == '__main__':
 
     # tests
     # split_dataset(r"C:\datasets\EuroSATallBands", split=[.8, .2], convert=True, dataset_suffix='npy_')
-    # split_dataset("/home/mate/dataset/EuroSATallBands", split=[.8, .2], convert=True, dataset_suffix='npy_')
+    # split_dataset("/home/mate/dataset/EuroSATallBands", split=[.8, .2], convert=True, dataset_suffix='mini_',
+    #               per_category_image_limit=300)
     # a = hsi_loader([1], r'C:\datasets\EuroSATallBands_train\Residential\Residential_1006.tif')
     print('done.')
 
