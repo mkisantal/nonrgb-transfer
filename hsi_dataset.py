@@ -68,7 +68,8 @@ def npy_hsi_loader(chs, path, normalize=True):
     return torch.tensor(image)
 
 
-def split_dataset(root_dir, split=[.8, .2], convert=False, dataset_suffix='', per_category_image_limit=None):
+def split_dataset(root_dir, split=[.8, .2], convert=False, dataset_suffix='', per_category_image_limit=None,
+                  semi_supervised=False):
 
     """ Splitting dataset to train (val) and test sets. Optionally converting to .npy for faster loading. """
 
@@ -83,6 +84,11 @@ def split_dataset(root_dir, split=[.8, .2], convert=False, dataset_suffix='', pe
         split_names = ['train', 'val', 'test']
     else:
         raise ValueError('Split should be length 2 (train, test) or 3 (train, val, test)')
+
+    if semi_supervised:
+        split_names.append('minitrain')
+        if per_category_image_limit is None:
+            raise ValueError('You need to specify \'per_category_image_limit\' to create semi-supervised dataset.')
 
     # create root folders for dataset partitions
     split_roots = []
@@ -108,8 +114,11 @@ def split_dataset(root_dir, split=[.8, .2], convert=False, dataset_suffix='', pe
         image_names = os.listdir(category_path)
         source_image_paths = []
         shuffle(image_names)
-        for image_name in image_names:
+        for i, image_name in enumerate(image_names):
             source_image_paths.append(os.path.join(category_path, image_name))
+            if semi_supervised and i < per_category_image_limit:
+                # duplicate source img for adding to minitrain too
+                source_image_paths.append(os.path.join(category_path, image_name))
 
         # divide images to partitions
         destination_image_paths = []
@@ -118,13 +127,11 @@ def split_dataset(root_dir, split=[.8, .2], convert=False, dataset_suffix='', pe
         split_limits = np.append([0], np.cumsum(num_images_in_split))
         split_limits[-1] = len(image_names)
         for i in range(split_limits.shape[0]-1):
-            if i == 0 and per_category_image_limit is not None:  # optionally use less image for training
-                to = per_category_image_limit
-            else:
-                to = split_limits[i+1]
-
-            for j in range(split_limits[i], to):
+            for j in range(split_limits[i], split_limits[i + 1]):
                 destination_image_paths.append(os.path.join(split_category_paths[i], image_names[j]))
+                if semi_supervised and i == 0 and j < per_category_image_limit:
+                    # add the image to minitrain as well
+                    destination_image_paths.append(os.path.join(split_category_paths[-1], image_names[j]))
 
         if convert:
             src_dst_dicts = [{'src': src, 'dst': dst[:-4]} for src, dst in zip(source_image_paths,
@@ -186,8 +193,8 @@ if __name__ == '__main__':
 
     # tests
     # split_dataset(r"C:\datasets\EuroSATallBands", split=[.8, .2], convert=True, dataset_suffix='npy_')
-    # split_dataset("/home/mate/dataset/EuroSATallBands", split=[.8, .2], convert=True, dataset_suffix='mini_',
-    #               per_category_image_limit=300)
+    split_dataset("/home/mate/dataset/EuroSATallBands", split=[.8, .2], convert=True, dataset_suffix='semi_',
+                  per_category_image_limit=300, semi_supervised=True)
     # a = hsi_loader([1], r'C:\datasets\EuroSATallBands_train\Residential\Residential_1006.tif')
     print('done.')
 
