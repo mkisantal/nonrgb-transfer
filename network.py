@@ -116,7 +116,7 @@ class PixelDADiscriminator(nn.Module):
         self.fc = nn.Linear(4096*4*4, 1)
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x):
+    def forward(self, x, return_logit=True):
         x = self.block1(x)
         x = self.block2(x)
         x = self.block3(x)
@@ -126,7 +126,10 @@ class PixelDADiscriminator(nn.Module):
         x = self.block7(x)
         x = self.fc(x.view(x.size(0), -1))
         out = self.sigmoid(x)
-        return out
+        if return_logit:
+            return out, x
+        else:
+            return out
 
 
 class PatchGanDiscriminator(nn.Module):
@@ -139,6 +142,7 @@ class PatchGanDiscriminator(nn.Module):
         self.block3 = DiscriminatorModule(128, kernel_size=4, stride=2)
         self.block4 = DiscriminatorModule(256, kernel_size=4, stride=1)
         self.last_conv = nn.Conv2d(512, 1, kernel_size=4, stride=1, padding=1, bias=True)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         x = self.conv1(x)
@@ -147,7 +151,8 @@ class PatchGanDiscriminator(nn.Module):
         x = self.block3(x)
         x = self.block4(x)
         x = self.last_conv(x)
-        return x
+        out = self.sigmoid(x)
+        return out, x
 
 
 class PixelGanDiscriminator(nn.Module):
@@ -157,13 +162,15 @@ class PixelGanDiscriminator(nn.Module):
         self.lrelu1 = nn.LeakyReLU(negative_slope=.2, inplace=True)
         self.block2 = DiscriminatorModule(64, kernel_size=1, stride=1, padding=0)
         self.last_conv = nn.Conv2d(128, 1, kernel_size=1, stride=1, padding=0, bias=True)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         x = self.conv1(x)
         x = self.lrelu1(x)
         x = self.block2(x)
         x = self.last_conv(x)
-        return x
+        out = self.sigmoid(x)
+        return out, x
 """
 
 Conv2d(3, 64, kernel_size=(1, 1), stride=(1, 1))
@@ -266,7 +273,10 @@ class MultiChannelNet(nn.Module):
         """ Parameter iterators for initializing pytorch optimizers. """
 
         if training_phase == 'generator':
-            return itertools.chain(self.input_transform_module.parameters(), self.rgb_net.parameters())
+            if self.input_transform_module is not None:
+                return itertools.chain(self.input_transform_module.parameters(), self.rgb_net.parameters())
+            else:
+                return self.rgb_net.parameters()
         if training_phase == 'discriminator':
             return self.domain_discriminator.parameters()
 
