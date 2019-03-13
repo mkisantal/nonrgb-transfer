@@ -1,5 +1,7 @@
 from torchvision.datasets import DatasetFolder
+from torch.utils.data import Dataset
 import rasterio
+import tifffile
 from functools import partial
 import torch
 from scipy.ndimage.interpolation import zoom
@@ -10,7 +12,7 @@ from shutil import copyfile
 import json
 from multiprocessing import Pool
 import tqdm
-
+from torch.utils.data import DataLoader
 
 # getting statistics ready
 try:
@@ -45,6 +47,35 @@ def hsi_loader(chs, path, normalize=True):
 
     return torch.tensor(image)
 
+
+def hsi_loader_gfc(chs, path, dataset_stats=None):
+
+    """ Loader for GFC hyperspectral tif images, preprocesses and returns selected channels. """
+
+    image = tifffile.imread(path)
+    image = np.float32(image).swapaxes(0, -1)  # converting to channel first
+
+    if chs is not None:
+        image = image[chs, :, :]
+    else:
+        chs = np.arange(0, 8)
+    # for now image transforms are done here, as PIL does not work with >3 channels
+    # resize; don't use order >1 to avoid mixing channels
+    # image = zoom(image, zoom=[1, 3.5, 3.5], order=1, prefilter=False)  # 20 times slower than RGB processing!!
+    # normalize to zero mean and unit variance
+    if dataset_stats is not None:
+        image -= dataset_stats['spectrum_means'][chs, :, :]
+        image /= dataset_stats['spectrum_stds'][chs, :, :]
+
+    return torch.tensor(image)
+
+
+def segmentation_gt_loader(path):
+
+    """ Loading segmentation ground truth images for segmentation. """
+
+    image = tifffile.imread(path)
+    return image
 
 def npy_hsi_loader(chs, path, normalize=True):
 
@@ -237,12 +268,45 @@ class HsiImageFolder(DatasetFolder):
     def __init__(self, root, transform=None, target_transform=None, channels=None, npy=False):
         super(HsiImageFolder, self).__init__(root=root,
                                              loader=partial(npy_hsi_loader, channels) if npy
-                                               else partial(hsi_loader, channels),
+                                                    else partial(hsi_loader, channels),
                                              extensions=['npy'] if npy else ['tif'],
                                              transform=transform,
                                              target_transform=target_transform)
         self.imgs = self.samples
         return
+
+
+class HsiSegmentationDataset(Dataset):
+
+    """ Dataset for HSI semantic segmentation datasets. """
+
+    def __init__(self, root, gt_root, channels=None):
+        print(root)
+        super(HsiSegmentationDataset, self).__init__()
+
+        self.root, self.gt_root = root, gt_root
+        self.image_list = os.listdir(root)
+        shuffle(self.image_list)
+
+        with open('gfc_channel_stats.json', 'r') as file:
+            ds_stats = json.load(file)
+        self.dataset_stats = dict()
+        self.dataset_stats['spectrum_means'] = np.expand_dims(np.expand_dims(np.array(
+            [x['mean'] for x in ds_stats]), 1), 1).astype('float32')
+        self.dataset_stats['spectrum_stds'] = np.expand_dims(np.expand_dims(np.array(
+            [x['std'] for x in ds_stats]), 1), 1).astype('float32')
+
+    def __len__(self):
+        return len(self.image_list)
+
+    def __getitem__(self, index):
+        image_name = self.image_list[index]
+        gt_name = image_name[:-7] + 'CLS.tif'
+        hsi_path = os.path.join(self.root, image_name)
+        gt_path = os.path.join(self.gt_root, gt_name)
+        image = hsi_loader_gfc(chs=None, path=hsi_path, dataset_stats=self.dataset_stats)
+        segmentation = segmentation_gt_loader(gt_path)
+        return image, segmentation
 
 
 def load_single_image(idx=None, category=None, root=None, channels=None, normalize=True):
@@ -268,7 +332,14 @@ if __name__ == '__main__':
     #               per_category_image_limit=300, semi_supervised=True)
     # a = hsi_loader([1], r'C:\datasets\EuroSATallBands_train\Residential\Residential_1006.tif')
     # split_dataset(root_dir="C:\datasets\grss\Track1-MSI-1", classification=False, image_limit=None)
-    split_dataset(root_dir='/home/mate/datasets/Track1-MSI', classification=False, image_limit=None)
+    # split_dataset(root_dir='/home/mate/datasets/Track1-MSI', classification=False, image_limit=None)
+
+    dataset = HsiSegmentationDataset(root=r'C:\datasets\grss\debug', gt_root=r'c:\datasets\grss\Track1-Truth')
+
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=1)
+    i = iter(dataloader)
+    img, segm = next(i)
+
     print('done.')
 
 
