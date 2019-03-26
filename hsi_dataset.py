@@ -331,9 +331,8 @@ if __name__ == '__main__':
     # split_dataset("/home/mate/dataset/EuroSATallBands", split=[.8, .2], convert=True, dataset_suffix='semi_',
     #               per_category_image_limit=300, semi_supervised=True)
     # a = hsi_loader([1], r'C:\datasets\EuroSATallBands_train\Residential\Residential_1006.tif')
-    # split_dataset(root_dir="C:\datasets\grss\Track1-MSI-1", classification=False, image_limit=None)
-    # split_dataset(root_dir='/home/mate/datasets/Track1-MSI', classification=False, image_limit=None)
-
+    # split_dataset(root_dir='/home/mate/datasets/grss/Track1-MSI', classification=False, image_limit = None,
+    #               dataset_suffix='A_')
     dataset = HsiSegmentationDataset(root=r'C:\datasets\grss\debug', gt_root=r'c:\datasets\grss\Track1-Truth')
 
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=1)

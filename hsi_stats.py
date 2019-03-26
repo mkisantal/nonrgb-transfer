@@ -103,9 +103,10 @@ def check_dataset_stats(root_dir, save=False, eurosat=False, filename=None):
 if __name__ == '__main__':
 
     # check_dataset_stats('/home/mate/dataset/EuroSATallBands_train', save=True)
+    check_dataset_stats('/home/mate/datasets/grss/Track1-MSI_A_train', save=True, eurosat=False,
+                        filename='gfc_channel_stats.json')
     # check_dataset_stats('C:\datasets\grss\debug', save=True, eurosat=False)
-    check_dataset_stats('C:\datasets\grss\debug', save=True, eurosat=False)
-    check_dataset_stats('C:\datasets\debug', save=True, eurosat=True)
+    # check_dataset_stats('C:\datasets\debug', save=True, eurosat=True)
     # check_dataset_stats('/datasets/EuroSATallBands_test', save=True)
 
 
