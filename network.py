@@ -4,6 +4,10 @@ from PIL import Image
 import numpy as np
 import torch  # for debug only
 import itertools
+import sys
+sys.path.append('../backboned-unet/')
+from unet import Unet
+
 
 fixed_random_noise_vector = [0.33963535, -0.70369039,  0.62590457,  0.59152784,  0.4051563,
                              0.26512166,  0.25203669, -0.39983498,  0.66386131, -0.94438161]
@@ -171,17 +175,6 @@ class PixelGanDiscriminator(nn.Module):
         x = self.last_conv(x)
         out = self.sigmoid(x)
         return out, x
-"""
-
-Conv2d(3, 64, kernel_size=(1, 1), stride=(1, 1))
-LeakyReLU(negative_slope=0.2, inplace)
-Conv2d(64, 128, kernel_size=(1, 1), stride=(1, 1), bias=False)
-BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-LeakyReLU(negative_slope=0.2, inplace)
-Conv2d(128, 1, kernel_size=(4, 4), stride=(1, 1))
-
-
-"""
 
 
 class MultiChannelNet(nn.Module):
@@ -191,23 +184,33 @@ class MultiChannelNet(nn.Module):
     def __init__(self,
                  num_channels=3,
                  num_classes=10,
-                 input_mode=None):
+                 input_mode=None,
+                 segmentation=True):
         super(MultiChannelNet, self).__init__()
 
         self.input_transform_module = None
-        self.rgb_net = models.resnet50(pretrained=True)
+        # self.rgb_net = models.resnet50(pretrained=True)
+        self.rgb_net = Unet(classes=num_classes)
+
+        self.segmentation_mode = segmentation
 
         if input_mode == 'replace_conv1':
-            self.rgb_net.conv1 = nn.Conv2d(num_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
-            nn.init.kaiming_normal_(self.rgb_net.conv1.weight, mode='fan_out', nonlinearity='relu')
+            conv1 = nn.Conv2d(num_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
+            if segmentation:
+                self.rgb_net.backbone.conv1 = conv1
+                nn.init.kaiming_normal_(self.rgb_net.backbone.conv1.weight, mode='fan_out', nonlinearity='relu')
+            else:
+                self.rgb_net.conv1 = conv1
+                nn.init.kaiming_normal_(self.rgb_net.conv1.weight, mode='fan_out', nonlinearity='relu')
         if input_mode == 'domain_adapter':
             # defining network for input transformation (architecture based on PixelDA)
             self.input_transform_module = PixelDAGenerator(num_channels)
         self.conv1_replaced = input_mode == 'replace_conv1'
 
         # replace output layer
-        fc_in_features = self.rgb_net.fc.in_features
-        self.rgb_net.fc = nn.Linear(fc_in_features, num_classes)
+        if not segmentation:
+            fc_in_features = self.rgb_net.fc.in_features
+            self.rgb_net.fc = nn.Linear(fc_in_features, num_classes)
 
     def forward(self, x, z=None):
 
@@ -241,13 +244,20 @@ class MultiChannelNet(nn.Module):
 
         """ Freeze rgb net, replaced layers, generator and discriminator trainable. """
 
-        for param in self.rgb_net.parameters():
-            param.requires_grad = False
-        for param in self.rgb_net.fc.parameters():
-            param.requires_grad = True
-        if self.conv1_replaced:
-            for param in self.rgb_net.conv1.parameters():
+        if self.segmentation_mode:
+            # only encoder part of U-net should be frozen
+            self.rgb_net.freeze_encoder()
+            if self.conv1_replaced:
+                for param in self.rgb_net.backbone.conv1.parameters():
+                    param.requires_grad = True
+        else:
+            for param in self.rgb_net.parameters():
+                param.requires_grad = False
+            for param in self.rgb_net.fc.parameters():
                 param.requires_grad = True
+            if self.conv1_replaced:
+                for param in self.rgb_net.conv1.parameters():
+                    param.requires_grad = True
         for subnetwork in [self.input_transform_module]:
             if subnetwork is not None:
                 for param in subnetwork.parameters():
@@ -284,11 +294,9 @@ class MultiChannelNet(nn.Module):
 if __name__ == '__main__':
     net = MultiChannelNet(num_channels=13,
                           num_classes=10,
-                          input_mode='domain_adapter')
+                          input_mode='replace_conv1')
     hsi = torch.ones([1, 13, 224, 224])
     rgb = torch.ones([1, 3, 224, 224])
-    from code import interact
-    interact(local=locals())
     # print(net)
     # net.set_feature_extracting()
     # net.set_finetuning()
