@@ -286,6 +286,7 @@ class HsiSegmentationDataset(Dataset):
 
         self.root, self.gt_root = root, gt_root
         self.image_list = os.listdir(root)
+        self.channels = channels
         shuffle(self.image_list)
 
         with open('gfc_channel_stats.json', 'r') as file:
@@ -304,7 +305,7 @@ class HsiSegmentationDataset(Dataset):
         gt_name = image_name[:-7] + 'CLS.tif'
         hsi_path = os.path.join(self.root, image_name)
         gt_path = os.path.join(self.gt_root, gt_name)
-        image = hsi_loader_gfc(chs=None, path=hsi_path, dataset_stats=self.dataset_stats)
+        image = hsi_loader_gfc(chs=self.channels, path=hsi_path, dataset_stats=self.dataset_stats)
         segmentation = segmentation_gt_loader(gt_path)
         return image, segmentation
 
