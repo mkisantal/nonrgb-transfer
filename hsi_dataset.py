@@ -75,7 +75,12 @@ def segmentation_gt_loader(path):
     """ Loading segmentation ground truth images for segmentation. """
 
     image = tifffile.imread(path)
+    indices1 = [2, 5, 6, 9, 17, 65]
+    indices2 = [0, 1, 2, 3, 4, 255]
+    for from_index, to_index in zip(indices1, indices2):
+        image[image == from_index] = to_index
     return image
+
 
 def npy_hsi_loader(chs, path, normalize=True):
 
@@ -334,12 +339,12 @@ if __name__ == '__main__':
     # a = hsi_loader([1], r'C:\datasets\EuroSATallBands_train\Residential\Residential_1006.tif')
     # split_dataset(root_dir='/home/mate/datasets/grss/Track1-MSI', classification=False, image_limit = None,
     #               dataset_suffix='A_')
-    dataset = HsiSegmentationDataset(root=r'C:\datasets\grss\debug', gt_root=r'c:\datasets\grss\Track1-Truth')
 
+    dataset = HsiSegmentationDataset(root=r'C:\datasets\grss\debug', gt_root=r'c:\datasets\grss\Track1-Truth')
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=1)
     i = iter(dataloader)
     img, segm = next(i)
-
+    print(np.unique(segm.numpy()))
     print('done.')
 
 
