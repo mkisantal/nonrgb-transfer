@@ -53,7 +53,7 @@ def hsi_loader_gfc(chs, path, dataset_stats=None):
     """ Loader for GFC hyperspectral tif images, preprocesses and returns selected channels. """
 
     image = tifffile.imread(path)
-    image = np.float32(image).swapaxes(0, -1)  # converting to channel first
+    image = np.float32(image).transpose(2, 0, 1)  # converting to channel first
 
     if chs is not None:
         image = image[chs, :, :]
