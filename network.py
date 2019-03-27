@@ -4,9 +4,7 @@ from PIL import Image
 import numpy as np
 import torch  # for debug only
 import itertools
-import sys
-sys.path.append('../backboned-unet/')
-from unet import Unet
+from backboned_unet import Unet  # https://github.com/mkisantal/backboned-unet
 
 
 fixed_random_noise_vector = [0.33963535, -0.70369039,  0.62590457,  0.59152784,  0.4051563,
