@@ -53,10 +53,10 @@ def hsi_loader_gfc(chs, path, dataset_stats=None):
     """ Loader for GFC hyperspectral tif images, preprocesses and returns selected channels. """
 
     image = tifffile.imread(path)
-    image = np.float32(image).transpose(2, 0, 1)  # converting to channel first
+    image = np.float32(image)  # keeping channel first for albumentation transforms
 
     if chs is not None:
-        image = image[chs, :, :]
+        image = image[:, :, chs]
     else:
         chs = np.arange(0, 8)
     # for now image transforms are done here, as PIL does not work with >3 channels
@@ -64,10 +64,10 @@ def hsi_loader_gfc(chs, path, dataset_stats=None):
     # image = zoom(image, zoom=[1, 3.5, 3.5], order=1, prefilter=False)  # 20 times slower than RGB processing!!
     # normalize to zero mean and unit variance
     if dataset_stats is not None:
-        image -= dataset_stats['spectrum_means'][chs, :, :]
-        image /= dataset_stats['spectrum_stds'][chs, :, :]
+        image -= dataset_stats['spectrum_means'][:, :, chs]
+        image /= dataset_stats['spectrum_stds'][:, :, chs]
 
-    return torch.tensor(image)
+    return image  # torch.tensor(image)
 
 
 def segmentation_gt_loader(path):
@@ -285,7 +285,7 @@ class HsiSegmentationDataset(Dataset):
 
     """ Dataset for HSI semantic segmentation datasets. """
 
-    def __init__(self, root, gt_root, channels=None):
+    def __init__(self, root, gt_root, channels=None, transforms=None):
         print(root)
         super(HsiSegmentationDataset, self).__init__()
 
@@ -298,9 +298,10 @@ class HsiSegmentationDataset(Dataset):
             ds_stats = json.load(file)
         self.dataset_stats = dict()
         self.dataset_stats['spectrum_means'] = np.expand_dims(np.expand_dims(np.array(
-            [x['mean'] for x in ds_stats]), 1), 1).astype('float32')
+            [x['mean'] for x in ds_stats]), 0), 0).astype('float32')
         self.dataset_stats['spectrum_stds'] = np.expand_dims(np.expand_dims(np.array(
-            [x['std'] for x in ds_stats]), 1), 1).astype('float32')
+            [x['std'] for x in ds_stats]), 0), 0).astype('float32')
+        self.transforms = transforms
 
     def __len__(self):
         return len(self.image_list)
@@ -312,6 +313,11 @@ class HsiSegmentationDataset(Dataset):
         gt_path = os.path.join(self.gt_root, gt_name)
         image = hsi_loader_gfc(chs=self.channels, path=hsi_path, dataset_stats=self.dataset_stats)
         segmentation = segmentation_gt_loader(gt_path)
+        if self.transforms is not None:
+            # albumentations transforms, not torchvision!
+            augmented = self.transforms(image=image, mask=segmentation)
+            image, segmentation = augmented['image'], augmented['mask']
+        image = image.transpose(2, 0, 1)  # converting to channel first
         return image, segmentation
 
 
@@ -340,12 +346,17 @@ if __name__ == '__main__':
     # split_dataset(root_dir='/home/mate/datasets/grss/Track1-MSI', classification=False, image_limit = None,
     #               dataset_suffix='A_')
 
-    dataset = HsiSegmentationDataset(root=r'C:\datasets\grss\debug', gt_root=r'c:\datasets\grss\Track1-Truth')
+    from albumentations import Compose, RandomCrop
+    transforms = Compose([RandomCrop(224, 224)])
+    dataset = HsiSegmentationDataset(root=r'C:\datasets\grss\debug', gt_root=r'c:\datasets\grss\Track1-Truth',
+                                     transforms=transforms)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=1)
     i = iter(dataloader)
     img, segm = next(i)
     print(np.unique(segm.numpy()))
     print('done.')
+    from code import interact
+    interact(local=locals())
 
 
 
