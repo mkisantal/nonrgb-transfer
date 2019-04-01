@@ -280,6 +280,7 @@ class MultiChannelNet(nn.Module):
 
         """ Parameter iterators for initializing pytorch optimizers. """
 
+        # TODO: remove this, use get_pretrained_parameters and get_random_initialized_parameters instead.
         if training_phase == 'generator':
             if self.input_transform_module is not None:
                 return itertools.chain(self.input_transform_module.parameters(), self.rgb_net.parameters())
@@ -287,6 +288,27 @@ class MultiChannelNet(nn.Module):
                 return self.rgb_net.parameters()
         if training_phase == 'discriminator':
             return self.domain_discriminator.parameters()
+
+    def get_pretrained_parameters(self):
+
+        """ Returning iterator for pretrained parametes, to be used with PyTorch optimizer"""
+
+        if self.segmentation_mode:
+            return self.rgb_net.get_pretrained_parameters()
+        else:
+            raise NotImplementedError('Only segmentation for now.')
+
+    def get_random_initialized_parameters(self):
+
+        """ Returning iterator for new, randomly initialized parametes, to be used with PyTorch optimizer"""
+
+        if self.segmentation_mode:
+            iterators = [self.rgb_net.get_random_initialized_parameters()]
+            if self.input_transform_module is not None:
+                iterators.append(self.input_transform_module.parameters())
+            return itertools.chain(iterators)
+        else:
+            raise NotImplementedError('Only segmentation for now.')
 
 
 if __name__ == '__main__':
