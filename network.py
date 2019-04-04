@@ -183,13 +183,16 @@ class MultiChannelNet(nn.Module):
                  num_channels=3,
                  num_classes=10,
                  input_mode=None,
-                 segmentation=True):
+                 segmentation=True,
+                 backbone_kwargs=None):
         super(MultiChannelNet, self).__init__()
 
         self.input_transform_module = None
         # self.rgb_net = models.resnet50(pretrained=True)
-        self.rgb_net = Unet(classes=num_classes)
-
+        if backbone_kwargs is not None:
+            self.rgb_net = Unet(classes=num_classes)
+        else:
+            self.rgb_net = Unet(**backbone_kwargs)
         self.segmentation_mode = segmentation
 
         if input_mode == 'replace_conv1':
@@ -306,7 +309,7 @@ class MultiChannelNet(nn.Module):
             iterators = [self.rgb_net.get_random_initialized_parameters()]
             if self.input_transform_module is not None:
                 iterators.append(self.input_transform_module.parameters())
-            return itertools.chain(iterators)
+            return itertools.chain(*iterators)
         else:
             raise NotImplementedError('Only segmentation for now.')
 
